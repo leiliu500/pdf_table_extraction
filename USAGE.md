@@ -44,6 +44,9 @@ python main.py -i path/to/pdf_directory/ -o output_directory/
 # Extract only tables (faster processing)
 python main.py -i path/to/file.pdf -o output/ --tables-only
 
+# Extract only text (faster processing)
+python main.py -i path/to/file.pdf -o output/ --texts-only
+
 # Use custom file pattern
 python main.py -i pdf_directory/ -o output/ --pattern "*.PDF"
 ```
@@ -68,6 +71,7 @@ python main.py -i file.pdf -o output/ --config config_sample.json
 | `-i, --input` | Input PDF file or directory | `-i pdf/file.pdf` |
 | `-o, --output` | Output directory | `-o results/` |
 | `--tables-only` | Extract only tables | `--tables-only` |
+| `--texts-only` | Extract only text content | `--texts-only` |
 | `--log-level` | Set logging level | `--log-level DEBUG` |
 | `--no-validation` | Disable accuracy validation | `--no-validation` |
 | `--pattern` | File pattern for directory processing | `--pattern "*.PDF"` |
@@ -95,6 +99,9 @@ results = extractor.extract_all()
 
 # Extract only tables
 table_results = extractor.extract_tables_only("pdf/304-Cedar-Street/1.pdf")
+
+# Extract only text  
+text_results = extractor.extract_texts_only("pdf/304-Cedar-Street/1.pdf")
 ```
 
 ### Advanced Configuration
@@ -288,11 +295,18 @@ python main.py -i pdf/304-Cedar-Street/2.\ Property\ Details.pdf -o output/ --lo
 python main.py -i pdf/304-Cedar-Street/ -o output/
 ```
 
-### Extract MLS Data
+### Extract MLS Text Content
 
 ```bash
-# Focus on MLS page tables
-python main.py -i pdf/304-Cedar-Street/1.\ Client\ MLS\ page.pdf -o output/ --tables-only
+# Focus on text extraction from MLS page
+python main.py -i pdf/304-Cedar-Street/1.\ Client\ MLS\ page.pdf -o output/ --texts-only
+```
+
+### Extract Property Details Text
+
+```bash
+# Extract text content from property details with high accuracy
+python main.py -i pdf/304-Cedar-Street/2.\ Property\ Details.pdf -o output/ --texts-only
 ```
 
 ## Troubleshooting
@@ -331,6 +345,12 @@ python main.py -i file.pdf -o output/ --no-validation
 
 # Extract only tables
 python main.py -i file.pdf -o output/ --tables-only
+
+# Extract only text
+python main.py -i file.pdf -o output/ --texts-only
+
+# Extract only text
+python main.py -i file.pdf -o output/ --texts-only
 
 # Use only fast methods in config
 {

@@ -342,6 +342,37 @@ class PDFExtractor:
         except Exception as e:
             logger.error(f"Table-only extraction failed for {pdf_path.name}", exception=e)
             raise
+
+    def extract_texts_only(self, pdf_path: Union[str, Path]) -> Dict[str, Any]:
+        """
+        Extract only text from a PDF file (optimized for text extraction)
+        
+        Args:
+            pdf_path: Path to the PDF file
+            
+        Returns:
+            Text extraction results
+        """
+        pdf_path = Path(pdf_path)
+        logger.trace_pdf_processing(str(pdf_path), "text_only_extraction_start")
+        
+        try:
+            text_results = self.text_extractor.extract_all_text(str(pdf_path))
+            
+            # Create output structure and save results
+            output_structure = self.file_handler.create_output_structure(pdf_path.name)
+            best_text = self.text_extractor.get_best_text(text_results)
+            if best_text and best_text.strip():
+                self._save_text_results(text_results, output_structure['text'], pdf_path.name)
+            
+            logger.trace_pdf_processing(str(pdf_path), "text_only_extraction_complete",
+                                      {'text_length': len(best_text) if best_text else 0})
+            
+            return text_results
+        
+        except Exception as e:
+            logger.error(f"Text-only extraction failed for {pdf_path.name}", exception=e)
+            raise
     
     def _save_table_results(self, table_results: Dict[str, Any], output_dir: Path, pdf_name: str):
         """Save table extraction results to files"""

@@ -32,6 +32,9 @@ Examples:
   # Extract only tables
   python main.py -i pdf/file.pdf -o output/ --tables-only
 
+  # Extract only text
+  python main.py -i pdf/file.pdf -o output/ --texts-only
+
   # Enable debug logging
   python main.py -i pdf/file.pdf -o output/ --log-level DEBUG
 
@@ -58,6 +61,12 @@ Examples:
         "--tables-only",
         action="store_true",
         help="Extract only tables (faster processing)"
+    )
+    
+    parser.add_argument(
+        "--texts-only",
+        action="store_true",
+        help="Extract only text content (faster processing)"
     )
     
     parser.add_argument(
@@ -201,6 +210,11 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
     
+    # Validate mutually exclusive options
+    if args.tables_only and args.texts_only:
+        print("Error: --tables-only and --texts-only cannot be used together")
+        sys.exit(1)
+    
     # Validate input path
     input_path = Path(args.input)
     if not input_path.exists():
@@ -259,7 +273,38 @@ def main():
                             tables_count = len(method_results.tables)
                             avg_confidence = sum(method_results.confidence_scores) / len(method_results.confidence_scores) if method_results.confidence_scores else 0
                             print(f"  • {method}: {tables_count} tables (confidence: {avg_confidence*100:.1f}%)")
+            
+            elif args.texts_only:
+                print(f"\nExtracting text only from: {input_path.name}")
+                text_results = extractor.extract_texts_only(input_path)
                 
+                # Print text-only summary
+                print(f"\n{'='*60}")
+                print(f"TEXT EXTRACTION RESULTS: {input_path.name}")
+                print(f"{'='*60}")
+                
+                best_text = extractor.text_extractor.get_best_text(text_results)
+                text_length = len(best_text) if best_text else 0
+                print(f"Text extracted: {text_length:,} characters")
+                print(f"Best method: {text_results.get('best_method', 'N/A')}")
+                print(f"Processing time: {text_results.get('total_processing_time', 0):.2f} seconds")
+                
+                if text_length > 0:
+                    print(f"\nMethods used:")
+                    for method in text_results['summary']['methods_used']:
+                        method_results = text_results['extraction_results'].get(method)
+                        if method_results and method_results.extraction_successful:
+                            method_text_length = len(method_results.text) if method_results.text else 0
+                            confidence_score = method_results.confidence_score if hasattr(method_results, 'confidence_score') else 0
+                            print(f"  • {method}: {method_text_length:,} characters (confidence: {confidence_score*100:.1f}%)")
+                    
+                    # Show text preview
+                    preview_length = min(200, text_length)
+                    preview = best_text[:preview_length].replace('\n', ' ').strip()
+                    if text_length > preview_length:
+                        preview += "..."
+                    print(f"\nText preview: {preview}")
+
             else:
                 print(f"\nExtracting all content from: {input_path.name}")
                 result = extractor.extract_pdf(input_path)
@@ -272,6 +317,8 @@ def main():
             
             if args.tables_only:
                 print("Note: --tables-only flag ignored for directory processing")
+            elif args.texts_only:
+                print("Note: --texts-only flag ignored for directory processing")
             
             results = extractor.extract_all(pattern=args.pattern)
             
