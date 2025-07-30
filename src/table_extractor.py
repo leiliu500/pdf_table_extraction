@@ -122,14 +122,21 @@ class CamelotTableExtractor:
             # Try stream method for tables without clear borders
             if 'stream' in self.settings.get('flavors', []):
                 logger.debug("Attempting Camelot stream extraction")
-                tables_stream = camelot.read_pdf(
-                    pdf_path,
-                    pages=pages,
-                    flavor='stream',
-                    edge_tol=self.settings.get('edge_tol', 500),
-                    row_tol=self.settings.get('row_tol', 10),
-                    column_tol=self.settings.get('column_tol', 0)
-                )
+                
+                # Build stream parameters, only include custom tolerances if specified
+                stream_params = {
+                    'pages': pages,
+                    'flavor': 'stream'
+                }
+                
+                if 'edge_tol' in self.settings:
+                    stream_params['edge_tol'] = self.settings['edge_tol']
+                if 'row_tol' in self.settings:
+                    stream_params['row_tol'] = self.settings['row_tol']
+                if 'column_tol' in self.settings:
+                    stream_params['column_tol'] = self.settings['column_tol']
+                
+                tables_stream = camelot.read_pdf(pdf_path, **stream_params)
                 
                 for table in tables_stream:
                     if not table.df.empty:
@@ -138,6 +145,7 @@ class CamelotTableExtractor:
                         for existing_table in all_tables:
                             if self._tables_similar(table.df, existing_table):
                                 is_duplicate = True
+                                logger.debug(f"Detected duplicate table on page {table.page}")
                                 break
                         
                         if not is_duplicate:
@@ -188,10 +196,15 @@ class CamelotTableExtractor:
             )
     
     def _tables_similar(self, table1: pd.DataFrame, table2: pd.DataFrame, 
-                       threshold: float = 0.8) -> bool:
+                       threshold: float = 0.95) -> bool:
         """Check if two tables are similar (to avoid duplicates)"""
+        # First check: different shapes are definitely different tables
         if table1.shape != table2.shape:
             return False
+        
+        # Second check: if shapes are identical but very small, be more lenient
+        if table1.size <= 4:  # 2x2 or smaller tables
+            threshold = 0.9
         
         try:
             # Convert to string and compare

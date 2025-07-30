@@ -19,9 +19,10 @@ TABLE_EXTRACTION_METHODS = {
     'camelot': {
         'enabled': True,  # Re-enabled after fixing Ghostscript dependency
         'flavors': ['lattice', 'stream'],
-        'edge_tol': 500,
-        'row_tol': 10,
-        'column_tol': 0
+        # Use default tolerance settings for maximum table detection accuracy
+        # 'edge_tol': 500,    # Commented out to use defaults
+        # 'row_tol': 10,      # Commented out to use defaults  
+        # 'column_tol': 0     # Commented out to use defaults
     },
     'tabula': {
         'enabled': True,
