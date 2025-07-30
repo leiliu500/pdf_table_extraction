@@ -1,0 +1,64 @@
+{
+  "tables": {
+    "camelot": {
+      "enabled": true,
+      "flavors": ["lattice", "stream"],
+      "edge_tol": 500,
+      "row_tol": 10,
+      "column_tol": 0
+    },
+    "tabula": {
+      "enabled": true,
+      "lattice": true,
+      "stream": true,
+      "multiple_tables": true,
+      "pandas_options": {
+        "header": 0
+      }
+    },
+    "pdfplumber": {
+      "enabled": true,
+      "table_settings": {
+        "vertical_strategy": "lines",
+        "horizontal_strategy": "lines",
+        "intersection_tolerance": 3
+      }
+    },
+    "pymupdf": {
+      "enabled": true,
+      "find_tables": true
+    }
+  },
+  "text": {
+    "preserve_layout": true,
+    "extract_metadata": true,
+    "extract_annotations": true,
+    "word_margin": 0.1,
+    "char_margin": 2.0,
+    "line_margin": 0.5,
+    "boxes_flow": 0.5
+  },
+  "images": {
+    "extract_images": true,
+    "min_width": 50,
+    "min_height": 50,
+    "supported_formats": ["PNG", "JPEG", "JPG", "TIFF", "BMP"]
+  },
+  "forms": {
+    "extract_form_fields": true,
+    "extract_annotations": true,
+    "extract_widgets": true
+  },
+  "output": {
+    "excel": true,
+    "csv": true,
+    "json": true,
+    "html": false
+  },
+  "validation": {
+    "enable_comparison": true,
+    "confidence_threshold": 0.8,
+    "generate_diff_reports": true,
+    "visual_validation": true
+  }
+}
