@@ -561,62 +561,68 @@ class PyMuPDFTableExtractor:
         page_numbers = []
         
         try:
-            doc = fitz.open(pdf_path)
-            
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-                logger.debug(f"Processing page {page_num + 1} with PyMuPDF")
+            doc = None
+            try:
+                doc = fitz.open(pdf_path)
+                total_pages = len(doc)  # Capture page count before processing
                 
-                # Find tables on the page
-                if self.settings.get('find_tables', True):
-                    tables = page.find_tables()
+                for page_num in range(total_pages):
+                    page = doc[page_num]
+                    logger.debug(f"Processing page {page_num + 1} with PyMuPDF")
                     
-                    for table in tables:
-                        try:
-                            # Extract table data
-                            table_data = table.extract()
-                            
-                            if table_data and len(table_data) > 1:
-                                # Convert to DataFrame
-                                df = pd.DataFrame(table_data[1:], columns=table_data[0])
-                                df = self._clean_table(df)
+                    # Find tables on the page
+                    if self.settings.get('find_tables', True):
+                        tables = page.find_tables()
+                        
+                        for table in tables:
+                            try:
+                                # Extract table data
+                                table_data = table.extract()
                                 
-                                if not df.empty:
-                                    all_tables.append(df)
-                                    confidence_scores.append(self._estimate_confidence(df, table))
-                                    page_numbers.append(page_num + 1)
+                                if table_data and len(table_data) > 1:
+                                    # Convert to DataFrame
+                                    df = pd.DataFrame(table_data[1:], columns=table_data[0])
+                                    df = self._clean_table(df)
                                     
-                                    logger.trace_table_extraction(
-                                        "pymupdf", page_num + 1, 1,
-                                        confidence_scores[-1],
-                                        {'shape': df.shape, 'bbox': table.bbox}
-                                    )
-                        except Exception as e:
-                            logger.warning(f"Failed to extract table from page {page_num + 1}: {str(e)}")
-            
-            doc.close()
-            
-            processing_time = time.time() - start_time
-            
-            logger.info(f"PyMuPDF extraction completed", 
-                       context={
-                           'tables_found': len(all_tables),
-                           'processing_time': processing_time,
-                           'avg_confidence': np.mean(confidence_scores) if confidence_scores else 0
-                       })
-            
-            return TableExtractionResult(
-                method="pymupdf",
-                tables=all_tables,
-                confidence_scores=confidence_scores,
-                processing_time=processing_time,
-                page_numbers=page_numbers,
-                extraction_successful=True,
-                metadata={
-                    'total_tables': len(all_tables),
-                    'pages_processed': len(doc)
-                }
-            )
+                                    if not df.empty:
+                                        all_tables.append(df)
+                                        confidence_scores.append(self._estimate_confidence(df, table))
+                                        page_numbers.append(page_num + 1)
+                                        
+                                        logger.trace_table_extraction(
+                                            "pymupdf", page_num + 1, 1,
+                                            confidence_scores[-1],
+                                            {'shape': df.shape, 'bbox': table.bbox}
+                                        )
+                            except Exception as e:
+                                logger.warning(f"Failed to extract table from page {page_num + 1}: {str(e)}")
+                
+                processing_time = time.time() - start_time
+                
+                logger.info(f"PyMuPDF extraction completed", 
+                           context={
+                               'tables_found': len(all_tables),
+                               'processing_time': processing_time,
+                               'avg_confidence': np.mean(confidence_scores) if confidence_scores else 0
+                           })
+                
+                return TableExtractionResult(
+                    method="pymupdf",
+                    tables=all_tables,
+                    confidence_scores=confidence_scores,
+                    processing_time=processing_time,
+                    page_numbers=page_numbers,
+                    extraction_successful=True,
+                    metadata={
+                        'total_tables': len(all_tables),
+                        'pages_processed': total_pages  # Use captured value instead of len(doc)
+                    }
+                )
+                
+            finally:
+                # Ensure document is always closed
+                if doc is not None:
+                    doc.close()
             
         except Exception as e:
             processing_time = time.time() - start_time

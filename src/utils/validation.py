@@ -49,9 +49,18 @@ class TableValidator:
         
         # Content comparison
         try:
+            # Normalize DataFrames before comparison
+            # Reset indexes and use generic column names
+            norm1 = table1.copy().reset_index(drop=True)
+            norm2 = table2.copy().reset_index(drop=True)
+            
+            # Use generic column names to avoid column label mismatch
+            norm1.columns = [f'col_{i}' for i in range(len(norm1.columns))]
+            norm2.columns = [f'col_{i}' for i in range(len(norm2.columns))]
+            
             # Convert to string for comparison
-            str1 = table1.fillna('').astype(str)
-            str2 = table2.fillna('').astype(str)
+            str1 = norm1.fillna('').astype(str)
+            str2 = norm2.fillna('').astype(str)
             
             # Cell-by-cell comparison
             matches = (str1 == str2).sum().sum()
