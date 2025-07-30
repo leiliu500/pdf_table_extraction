@@ -203,8 +203,13 @@ ACCURACY SCORES
 PROCESSING TIME
 --------------
 """
-        for stage, time_taken in report_data.get('processing_time', {}).items():
-            report_text += f"{stage}: {time_taken:.2f} seconds\n"
+        processing_time = report_data.get('processing_time', {})
+        if isinstance(processing_time, dict):
+            for stage, time_taken in processing_time.items():
+                report_text += f"{stage}: {time_taken:.2f} seconds\n"
+        else:
+            # processing_time is a float
+            report_text += f"Total: {processing_time:.2f} seconds\n"
         
         self.save_text(report_text, output_path)
     

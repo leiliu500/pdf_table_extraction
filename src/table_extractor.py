@@ -111,7 +111,8 @@ class CamelotTableExtractor:
                 for table in tables_lattice:
                     if not table.df.empty:
                         all_tables.append(table.df)
-                        confidence_scores.append(table.accuracy)
+                        # Normalize Camelot accuracy (0-100) to confidence score (0-1)
+                        confidence_scores.append(table.accuracy / 100.0)
                         page_numbers.append(table.page)
                         
                         logger.trace_table_extraction(
@@ -150,7 +151,8 @@ class CamelotTableExtractor:
                         
                         if not is_duplicate:
                             all_tables.append(table.df)
-                            confidence_scores.append(table.accuracy)
+                            # Normalize Camelot accuracy (0-100) to confidence score (0-1)
+                            confidence_scores.append(table.accuracy / 100.0)
                             page_numbers.append(table.page)
                             
                             logger.trace_table_extraction(

@@ -373,6 +373,37 @@ class PDFExtractor:
         except Exception as e:
             logger.error(f"Text-only extraction failed for {pdf_path.name}", exception=e)
             raise
+
+    def extract_forms_only(self, pdf_path: Union[str, Path]) -> Dict[str, Any]:
+        """
+        Extract only form fields from a PDF file (optimized for form extraction)
+        
+        Args:
+            pdf_path: Path to the PDF file
+            
+        Returns:
+            Form extraction results
+        """
+        pdf_path = Path(pdf_path)
+        logger.trace_pdf_processing(str(pdf_path), "form_only_extraction_start")
+        
+        try:
+            form_results = self.form_extractor.extract_all_forms(str(pdf_path))
+            
+            # Create output structure and save results
+            output_structure = self.file_handler.create_output_structure(pdf_path.name)
+            best_fields = self.form_extractor.get_best_fields(form_results)
+            if best_fields:
+                self._save_form_results(form_results, output_structure['forms'], pdf_path.name)
+            
+            logger.trace_pdf_processing(str(pdf_path), "form_only_extraction_complete",
+                                      {'fields_found': len(best_fields) if best_fields else 0})
+            
+            return form_results
+        
+        except Exception as e:
+            logger.error(f"Form-only extraction failed for {pdf_path.name}", exception=e)
+            raise
     
     def _save_table_results(self, table_results: Dict[str, Any], output_dir: Path, pdf_name: str):
         """Save table extraction results to files"""

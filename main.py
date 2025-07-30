@@ -35,6 +35,9 @@ Examples:
   # Extract only text
   python main.py -i pdf/file.pdf -o output/ --texts-only
 
+  # Extract only forms
+  python main.py -i pdf/file.pdf -o output/ --forms-only
+
   # Enable debug logging
   python main.py -i pdf/file.pdf -o output/ --log-level DEBUG
 
@@ -67,6 +70,12 @@ Examples:
         "--texts-only",
         action="store_true",
         help="Extract only text content (faster processing)"
+    )
+    
+    parser.add_argument(
+        "--forms-only",
+        action="store_true",
+        help="Extract only form fields (faster processing)"
     )
     
     parser.add_argument(
@@ -190,8 +199,11 @@ def print_results_summary(results):
             # Confidence scores
             confidence = result.confidence_scores
             print(f"\nCONFIDENCE SCORES:")
-            for category, score in confidence.items():
-                print(f"  {category.capitalize()}: {score*100:.1f}%")
+            if isinstance(confidence, dict):
+                for category, score in confidence.items():
+                    print(f"  {category.capitalize()}: {score*100:.1f}%")
+            else:
+                print(f"  Overall: {confidence*100:.1f}%")
             
             # Output files
             if result.output_files:
@@ -211,8 +223,9 @@ def main():
     args = parser.parse_args()
     
     # Validate mutually exclusive options
-    if args.tables_only and args.texts_only:
-        print("Error: --tables-only and --texts-only cannot be used together")
+    exclusive_options = [args.tables_only, args.texts_only, args.forms_only]
+    if sum(exclusive_options) > 1:
+        print("Error: --tables-only, --texts-only, and --forms-only cannot be used together")
         sys.exit(1)
     
     # Validate input path
@@ -273,6 +286,9 @@ def main():
                             tables_count = len(method_results.tables)
                             avg_confidence = sum(method_results.confidence_scores) / len(method_results.confidence_scores) if method_results.confidence_scores else 0
                             print(f"  • {method}: {tables_count} tables (confidence: {avg_confidence*100:.1f}%)")
+                
+                print(f"\nExtraction completed. Results saved to: {args.output}")
+                return
             
             elif args.texts_only:
                 print(f"\nExtracting text only from: {input_path.name}")
@@ -304,6 +320,49 @@ def main():
                     if text_length > preview_length:
                         preview += "..."
                     print(f"\nText preview: {preview}")
+                
+                print(f"\nExtraction completed. Results saved to: {args.output}")
+                return
+
+            elif args.forms_only:
+                print(f"\nExtracting forms only from: {input_path.name}")
+                form_results = extractor.extract_forms_only(input_path)
+                
+                # Print form-only summary
+                print(f"\n{'='*60}")
+                print(f"FORM EXTRACTION RESULTS: {input_path.name}")
+                print(f"{'='*60}")
+                
+                best_fields = extractor.form_extractor.get_best_fields(form_results)
+                fields_count = len(best_fields) if best_fields else 0
+                print(f"Form fields found: {fields_count}")
+                print(f"Best method: {form_results.get('best_method', 'N/A')}")
+                print(f"Processing time: {form_results.get('total_processing_time', 0):.2f} seconds")
+                
+                if fields_count > 0:
+                    print(f"\nMethods used:")
+                    for method in form_results['summary']['methods_used']:
+                        method_results = form_results['extraction_results'].get(method)
+                        if method_results and method_results.extraction_successful:
+                            method_fields_count = len(method_results.form_fields) if hasattr(method_results, 'form_fields') and method_results.form_fields else 0
+                            confidence_score = method_results.confidence_score if hasattr(method_results, 'confidence_score') else 0
+                            print(f"  • {method}: {method_fields_count} fields (confidence: {confidence_score*100:.1f}%)")
+                    
+                    # Show fields preview
+                    if isinstance(best_fields, list) and len(best_fields) > 0:
+                        print(f"\nForm fields preview:")
+                        preview_count = min(5, len(best_fields))
+                        for i, field in enumerate(best_fields[:preview_count]):
+                            field_name = field.get('name', f'Field_{i+1}') if isinstance(field, dict) else f'Field_{i+1}'
+                            field_value = field.get('value', 'N/A') if isinstance(field, dict) else str(field)
+                            if len(str(field_value)) > 50:
+                                field_value = str(field_value)[:50] + "..."
+                            print(f"  • {field_name}: {field_value}")
+                        if len(best_fields) > preview_count:
+                            print(f"  ... and {len(best_fields) - preview_count} more fields")
+                
+                print(f"\nExtraction completed. Results saved to: {args.output}")
+                return
 
             else:
                 print(f"\nExtracting all content from: {input_path.name}")
@@ -319,6 +378,8 @@ def main():
                 print("Note: --tables-only flag ignored for directory processing")
             elif args.texts_only:
                 print("Note: --texts-only flag ignored for directory processing")
+            elif args.forms_only:
+                print("Note: --forms-only flag ignored for directory processing")
             
             results = extractor.extract_all(pattern=args.pattern)
             
@@ -333,6 +394,8 @@ def main():
         sys.exit(1)
     
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         logger.error("Extraction failed", exception=e)
         print(f"Error: Extraction failed: {e}")
         sys.exit(1)

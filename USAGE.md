@@ -47,6 +47,9 @@ python main.py -i path/to/file.pdf -o output/ --tables-only
 # Extract only text (faster processing)
 python main.py -i path/to/file.pdf -o output/ --texts-only
 
+# Extract only forms (faster processing)
+python main.py -i path/to/file.pdf -o output/ --forms-only
+
 # Use custom file pattern
 python main.py -i pdf_directory/ -o output/ --pattern "*.PDF"
 ```
@@ -72,6 +75,7 @@ python main.py -i file.pdf -o output/ --config config_sample.json
 | `-o, --output` | Output directory | `-o results/` |
 | `--tables-only` | Extract only tables | `--tables-only` |
 | `--texts-only` | Extract only text content | `--texts-only` |
+| `--forms-only` | Extract only form fields | `--forms-only` |
 | `--log-level` | Set logging level | `--log-level DEBUG` |
 | `--no-validation` | Disable accuracy validation | `--no-validation` |
 | `--pattern` | File pattern for directory processing | `--pattern "*.PDF"` |
@@ -102,6 +106,9 @@ table_results = extractor.extract_tables_only("pdf/304-Cedar-Street/1.pdf")
 
 # Extract only text  
 text_results = extractor.extract_texts_only("pdf/304-Cedar-Street/1.pdf")
+
+# Extract only forms
+form_results = extractor.extract_forms_only("pdf/304-Cedar-Street/1.pdf")
 ```
 
 ### Advanced Configuration
@@ -309,6 +316,13 @@ python main.py -i pdf/304-Cedar-Street/1.\ Client\ MLS\ page.pdf -o output/ --te
 python main.py -i pdf/304-Cedar-Street/2.\ Property\ Details.pdf -o output/ --texts-only
 ```
 
+### Extract Form Fields
+
+```bash
+# Extract form fields from PDFs with form data
+python main.py -i pdf/304-Cedar-Street/1.\ Client\ MLS\ page.pdf -o output/ --forms-only
+```
+
 ## Troubleshooting
 
 ### Common Issues
@@ -349,8 +363,8 @@ python main.py -i file.pdf -o output/ --tables-only
 # Extract only text
 python main.py -i file.pdf -o output/ --texts-only
 
-# Extract only text
-python main.py -i file.pdf -o output/ --texts-only
+# Extract only forms
+python main.py -i file.pdf -o output/ --forms-only
 
 # Use only fast methods in config
 {

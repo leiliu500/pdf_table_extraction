@@ -294,9 +294,9 @@ class PyPDF2FormExtractor:
                     except Exception as e:
                         logger.debug(f"Could not extract text fields: {e}")
                 
-                # Try to extract fields from document info
-                if hasattr(pdf_reader, 'documentInfo') and pdf_reader.documentInfo:
-                    doc_info = pdf_reader.documentInfo
+                # Try to extract fields from document metadata
+                if hasattr(pdf_reader, 'metadata') and pdf_reader.metadata:
+                    doc_info = pdf_reader.metadata
                     for key, value in doc_info.items():
                         if value:
                             field = FormField(
