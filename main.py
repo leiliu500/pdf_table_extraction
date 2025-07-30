@@ -38,6 +38,9 @@ Examples:
   # Extract only forms
   python main.py -i pdf/file.pdf -o output/ --forms-only
 
+  # Extract only images
+  python main.py -i pdf/file.pdf -o output/ --images-only
+
   # Enable debug logging
   python main.py -i pdf/file.pdf -o output/ --log-level DEBUG
 
@@ -76,6 +79,12 @@ Examples:
         "--forms-only",
         action="store_true",
         help="Extract only form fields (faster processing)"
+    )
+    
+    parser.add_argument(
+        "--images-only",
+        action="store_true",
+        help="Extract only images (faster processing)"
     )
     
     parser.add_argument(
@@ -223,9 +232,9 @@ def main():
     args = parser.parse_args()
     
     # Validate mutually exclusive options
-    exclusive_options = [args.tables_only, args.texts_only, args.forms_only]
+    exclusive_options = [args.tables_only, args.texts_only, args.forms_only, args.images_only]
     if sum(exclusive_options) > 1:
-        print("Error: --tables-only, --texts-only, and --forms-only cannot be used together")
+        print("Error: --tables-only, --texts-only, --forms-only, and --images-only cannot be used together")
         sys.exit(1)
     
     # Validate input path
@@ -364,6 +373,40 @@ def main():
                 print(f"\nExtraction completed. Results saved to: {args.output}")
                 return
 
+            elif args.images_only:
+                print(f"\nExtracting images only from: {input_path.name}")
+                image_results = extractor.extract_images_only(input_path)
+                
+                print(f"\n{'='*60}")
+                print(f"IMAGE EXTRACTION RESULTS: {input_path.name}")
+                print(f"{'='*60}")
+                
+                total_images = 0
+                best_method = "N/A"
+                processing_time = 0
+                
+                # Get summary from results
+                if image_results and 'summary' in image_results:
+                    total_images = image_results['summary'].get('total_images_found', 0)
+                    best_method = image_results.get('best_method', 'N/A')
+                    processing_time = image_results.get('total_processing_time', 0)
+                
+                print(f"Images found: {total_images}")
+                print(f"Best method: {best_method}")
+                print(f"Processing time: {processing_time:.2f} seconds")
+                
+                if total_images > 0:
+                    print(f"\nMethods used:")
+                    for method in image_results['summary']['methods_used']:
+                        method_results = image_results['extraction_results'].get(method)
+                        if method_results and method_results.extraction_successful:
+                            images_count = len(method_results.images)
+                            confidence_score = sum(method_results.confidence_scores) / len(method_results.confidence_scores) if method_results.confidence_scores else 0
+                            print(f"  • {method}: {images_count} images (confidence: {confidence_score*100:.1f}%)")
+                
+                print(f"\nExtraction completed. Results saved to: {args.output}")
+                return
+
             else:
                 print(f"\nExtracting all content from: {input_path.name}")
                 result = extractor.extract_pdf(input_path)
@@ -380,6 +423,8 @@ def main():
                 print("Note: --texts-only flag ignored for directory processing")
             elif args.forms_only:
                 print("Note: --forms-only flag ignored for directory processing")
+            elif args.images_only:
+                print("Note: --images-only flag ignored for directory processing")
             
             results = extractor.extract_all(pattern=args.pattern)
             

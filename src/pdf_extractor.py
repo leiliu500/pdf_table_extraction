@@ -405,6 +405,36 @@ class PDFExtractor:
             logger.error(f"Form-only extraction failed for {pdf_path.name}", exception=e)
             raise
     
+    def extract_images_only(self, pdf_path: Union[str, Path]) -> Dict[str, Any]:
+        """
+        Extract only images from a PDF file (optimized for image extraction)
+        
+        Args:
+            pdf_path: Path to the PDF file
+            
+        Returns:
+            Image extraction results
+        """
+        pdf_path = Path(pdf_path)
+        logger.trace_pdf_processing(str(pdf_path), "image_only_extraction_start")
+        
+        try:
+            # Create output structure first to get the images directory
+            output_structure = self.file_handler.create_output_structure(pdf_path.name)
+            image_results = self.image_extractor.extract_all_images(str(pdf_path), output_structure['images'])
+            
+            # Get best images for logging
+            best_images = self.image_extractor.get_best_images(image_results)
+            
+            logger.trace_pdf_processing(str(pdf_path), "image_only_extraction_complete",
+                                      {'images_found': len(best_images) if best_images else 0})
+            
+            return image_results
+        
+        except Exception as e:
+            logger.error(f"Image-only extraction failed for {pdf_path.name}", exception=e)
+            raise
+    
     def _save_table_results(self, table_results: Dict[str, Any], output_dir: Path, pdf_name: str):
         """Save table extraction results to files"""
         best_tables = self.table_extractor.get_best_tables(table_results)
