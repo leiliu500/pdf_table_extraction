@@ -17,7 +17,7 @@ LOGS_DIR.mkdir(exist_ok=True)
 # Extraction settings
 TABLE_EXTRACTION_METHODS = {
     'camelot': {
-        'enabled': True,
+        'enabled': True,  # Re-enabled after fixing Ghostscript dependency
         'flavors': ['lattice', 'stream'],
         'edge_tol': 500,
         'row_tol': 10,

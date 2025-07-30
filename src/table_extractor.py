@@ -9,7 +9,21 @@ import numpy as np
 from dataclasses import dataclass
 
 # PDF processing libraries
+import os
 try:
+    # Set Ghostscript paths for camelot
+    gs_bin_path = "/usr/local/Cellar/ghostscript/10.05.1/bin"
+    gs_lib_path = "/usr/local/Cellar/ghostscript/10.05.1/lib"
+    
+    # Add Ghostscript binary to PATH
+    if os.path.exists(gs_bin_path):
+        os.environ['PATH'] = f"{gs_bin_path}:{os.environ.get('PATH', '')}"
+    
+    # Add Ghostscript library to library path (critical for camelot)
+    if os.path.exists(gs_lib_path):
+        current_dyld = os.environ.get('DYLD_LIBRARY_PATH', '')
+        os.environ['DYLD_LIBRARY_PATH'] = f"{gs_lib_path}:{current_dyld}" if current_dyld else gs_lib_path
+    
     import camelot
     CAMELOT_AVAILABLE = True
 except ImportError:
@@ -464,10 +478,14 @@ class PDFPlumberTableExtractor:
         
         # Strip whitespace from string columns
         for col in df.columns:
-            if df[col].dtype == 'object':
-                df[col] = df[col].astype(str).str.strip()
-                # Replace 'None' strings with actual None
-                df[col] = df[col].replace('None', None)
+            try:
+                if df[col].dtype == 'object':
+                    df[col] = df[col].astype(str).str.strip()
+                    # Replace 'None' strings with actual None
+                    df[col] = df[col].replace('None', None)
+            except (AttributeError, KeyError):
+                # Skip columns that cause issues
+                continue
         
         return df
     
@@ -609,9 +627,13 @@ class PyMuPDFTableExtractor:
         
         # Clean string data
         for col in df.columns:
-            if df[col].dtype == 'object':
-                df[col] = df[col].astype(str).str.strip()
-                df[col] = df[col].replace(['None', 'nan', ''], None)
+            try:
+                if df[col].dtype == 'object':
+                    df[col] = df[col].astype(str).str.strip()
+                    df[col] = df[col].replace(['None', 'nan', ''], None)
+            except (AttributeError, KeyError):
+                # Skip columns that cause issues
+                continue
         
         return df
     
