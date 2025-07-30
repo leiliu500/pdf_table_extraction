@@ -387,7 +387,7 @@ def main():
                 
                 # Get summary from results
                 if image_results and 'summary' in image_results:
-                    total_images = image_results['summary'].get('total_images_found', 0)
+                    total_images = image_results['summary'].get('total_images_combined', 0)
                     best_method = image_results.get('best_method', 'N/A')
                     processing_time = image_results.get('total_processing_time', 0)
                 
@@ -401,8 +401,28 @@ def main():
                         method_results = image_results['extraction_results'].get(method)
                         if method_results and method_results.extraction_successful:
                             images_count = len(method_results.images)
-                            confidence_score = sum(method_results.confidence_scores) / len(method_results.confidence_scores) if method_results.confidence_scores else 0
-                            print(f"  • {method}: {images_count} images (confidence: {confidence_score*100:.1f}%)")
+                            
+                            # Calculate average OCR confidence from images with OCR data
+                            ocr_confidences = [img.ocr_confidence for img in method_results.images 
+                                             if hasattr(img, 'ocr_confidence') and img.ocr_confidence is not None]
+                            avg_confidence = sum(ocr_confidences) / len(ocr_confidences) if ocr_confidences else 0
+                            
+                            if avg_confidence > 0:
+                                print(f"  • {method}: {images_count} images (avg OCR confidence: {avg_confidence*100:.1f}%)")
+                            else:
+                                print(f"  • {method}: {images_count} images")
+                    
+                    # Show OCR summary if available
+                    combined_images = image_results.get('combined_images', [])
+                    images_with_text = [img for img in combined_images 
+                                      if hasattr(img, 'ocr_text') and img.ocr_text and len(img.ocr_text.strip()) > 3]
+                    
+                    if images_with_text:
+                        avg_ocr_confidence = sum(img.ocr_confidence for img in images_with_text if img.ocr_confidence) / len(images_with_text)
+                        print(f"\nOCR Results:")
+                        print(f"  • {len(images_with_text)} images contain readable text")
+                        print(f"  • Average OCR confidence: {avg_ocr_confidence*100:.1f}%")
+                        print(f"  • Total text extracted: {sum(len(img.ocr_text) for img in images_with_text)} characters")
                 
                 print(f"\nExtraction completed. Results saved to: {args.output}")
                 return

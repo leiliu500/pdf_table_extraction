@@ -61,7 +61,14 @@ IMAGE_EXTRACTION_SETTINGS = {
     'extract_images': True,
     'min_width': 50,
     'min_height': 50,
-    'supported_formats': ['PNG', 'JPEG', 'JPG', 'TIFF', 'BMP']
+    'supported_formats': ['PNG', 'JPEG', 'JPG', 'TIFF', 'BMP'],
+    # OCR settings
+    'enable_ocr': True,
+    'tesseract_enabled': True,
+    'easyocr_enabled': True,
+    'ocr_min_confidence': 0.3,
+    'ocr_min_text_length': 3,
+    'image_preprocessing': True
 }
 
 # Form extraction settings

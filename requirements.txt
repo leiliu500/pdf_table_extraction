@@ -16,3 +16,5 @@ pymupdf>=1.24.0
 beautifulsoup4==4.12.2
 lxml>=5.0.0
 ghostscript>=0.7
+pytesseract>=0.3.10
+easyocr>=1.7.0

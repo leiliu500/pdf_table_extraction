@@ -1,5 +1,5 @@
 """
-Image extraction module for PDF files
+Image extraction module for PDF files with OCR capabilities
 """
 import time
 import io
@@ -26,6 +26,27 @@ try:
 except ImportError:
     PIL_AVAILABLE = False
 
+# OCR libraries
+try:
+    import pytesseract
+    PYTESSERACT_AVAILABLE = True
+except ImportError:
+    PYTESSERACT_AVAILABLE = False
+
+try:
+    import easyocr
+    EASYOCR_AVAILABLE = True
+except ImportError:
+    EASYOCR_AVAILABLE = False
+
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+
+import numpy as np
+
 from .config.settings import IMAGE_EXTRACTION_SETTINGS
 from .utils.logger import get_logger
 
@@ -44,6 +65,9 @@ class ExtractedImage:
     bbox: Optional[List[float]] = None
     size_bytes: int = 0
     dpi: Optional[Tuple[int, int]] = None
+    ocr_text: Optional[str] = None
+    ocr_confidence: Optional[float] = None
+    ocr_method: Optional[str] = None
 
 
 @dataclass
@@ -310,8 +334,223 @@ class PDFPlumberImageExtractor:
             )
 
 
+class OCRImageProcessor:
+    """OCR processing for extracted images"""
+    
+    def __init__(self, settings: Dict[str, Any]):
+        self.settings = settings
+        self.tesseract_enabled = PYTESSERACT_AVAILABLE and settings.get('tesseract_enabled', True)
+        self.easyocr_enabled = EASYOCR_AVAILABLE and settings.get('easyocr_enabled', True)
+        self.cv2_available = CV2_AVAILABLE
+        self.easyocr_reader = None
+        
+        # Initialize EasyOCR reader if available
+        if self.easyocr_enabled and EASYOCR_AVAILABLE:
+            try:
+                self.easyocr_reader = easyocr.Reader(['en'], gpu=False)
+                logger.info("EasyOCR reader initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize EasyOCR: {str(e)}")
+                self.easyocr_enabled = False
+        elif not EASYOCR_AVAILABLE and settings.get('easyocr_enabled', True):
+            logger.info("EasyOCR not available (requires PyTorch), using Tesseract only")
+            self.easyocr_enabled = False
+        
+        # Check Tesseract availability
+        if self.tesseract_enabled and PYTESSERACT_AVAILABLE:
+            try:
+                pytesseract.get_tesseract_version()
+                logger.info("Tesseract OCR available")
+            except Exception as e:
+                logger.warning(f"Tesseract not available: {str(e)}")
+                self.tesseract_enabled = False
+        elif not PYTESSERACT_AVAILABLE:
+            logger.warning("pytesseract not available")
+            self.tesseract_enabled = False
+    
+    def preprocess_image(self, image_data: bytes) -> np.ndarray:
+        """Preprocess image for better OCR results"""
+        try:
+            # Convert bytes to PIL Image
+            pil_image = Image.open(io.BytesIO(image_data))
+            
+            # Convert to RGB if necessary
+            if pil_image.mode != 'RGB':
+                pil_image = pil_image.convert('RGB')
+            
+            # If OpenCV is available, use advanced preprocessing
+            if self.cv2_available and CV2_AVAILABLE:
+                # Convert to numpy array for OpenCV processing
+                image_array = np.array(pil_image)
+                
+                # Convert RGB to BGR for OpenCV
+                if len(image_array.shape) == 3:
+                    image_array = cv2.cvtColor(image_array, cv2.COLOR_RGB2BGR)
+                
+                # Convert to grayscale for better OCR
+                gray = cv2.cvtColor(image_array, cv2.COLOR_BGR2GRAY)
+                
+                # Apply image enhancement techniques
+                # 1. Noise reduction
+                denoised = cv2.fastNlMeansDenoising(gray)
+                
+                # 2. Contrast enhancement
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                enhanced = clahe.apply(denoised)
+                
+                # 3. Adaptive thresholding for better text extraction
+                thresh = cv2.adaptiveThreshold(
+                    enhanced, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+                )
+                
+                return thresh
+            else:
+                # Fallback to basic PIL processing if OpenCV not available
+                logger.debug("Using basic PIL preprocessing (OpenCV not available)")
+                grayscale = pil_image.convert('L')
+                return np.array(grayscale)
+            
+        except Exception as e:
+            logger.warning(f"Image preprocessing failed: {str(e)}")
+            # Fallback to original image
+            try:
+                pil_image = Image.open(io.BytesIO(image_data))
+                return np.array(pil_image.convert('L'))  # Convert to grayscale
+            except:
+                return None
+    
+    def extract_text_tesseract(self, image_data: bytes) -> Tuple[Optional[str], Optional[float]]:
+        """Extract text using Tesseract OCR"""
+        if not self.tesseract_enabled:
+            return None, None
+        
+        try:
+            # Preprocess image
+            processed_image = self.preprocess_image(image_data)
+            if processed_image is None:
+                return None, None
+            
+            # Configure Tesseract for better accuracy
+            custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz .,!?@#$%^&*()_+-=[]{}|;:,.<>?/~`'
+            
+            # Extract text
+            text = pytesseract.image_to_string(processed_image, config=custom_config)
+            
+            # Get confidence scores
+            data = pytesseract.image_to_data(processed_image, output_type=pytesseract.Output.DICT)
+            confidences = [int(conf) for conf in data['conf'] if int(conf) > 0]
+            avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+            
+            # Clean and validate text
+            cleaned_text = self._clean_ocr_text(text)
+            
+            return cleaned_text, avg_confidence / 100.0  # Convert to 0-1 range
+            
+        except Exception as e:
+            logger.warning(f"Tesseract OCR failed: {str(e)}")
+            return None, None
+    
+    def extract_text_easyocr(self, image_data: bytes) -> Tuple[Optional[str], Optional[float]]:
+        """Extract text using EasyOCR"""
+        if not self.easyocr_enabled or self.easyocr_reader is None or not EASYOCR_AVAILABLE:
+            return None, None
+        
+        try:
+            # Convert image data to numpy array
+            image_array = np.frombuffer(image_data, dtype=np.uint8)
+            
+            # Use OpenCV if available, otherwise use PIL
+            if self.cv2_available and CV2_AVAILABLE:
+                image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+            else:
+                # Fallback to PIL
+                pil_image = Image.open(io.BytesIO(image_data))
+                image = np.array(pil_image)
+            
+            if image is None:
+                return None, None
+            
+            # Extract text with EasyOCR
+            results = self.easyocr_reader.readtext(image)
+            
+            # Combine text and calculate average confidence
+            extracted_texts = []
+            confidences = []
+            
+            for (bbox, text, confidence) in results:
+                if confidence > 0.1:  # Filter out very low confidence results
+                    extracted_texts.append(text)
+                    confidences.append(confidence)
+            
+            if not extracted_texts:
+                return None, None
+            
+            # Combine texts and calculate average confidence
+            combined_text = ' '.join(extracted_texts)
+            avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+            
+            cleaned_text = self._clean_ocr_text(combined_text)
+            
+            return cleaned_text, avg_confidence
+            
+        except Exception as e:
+            logger.warning(f"EasyOCR failed: {str(e)}")
+            return None, None
+    
+    def extract_text_from_image(self, image_data: bytes) -> Tuple[Optional[str], Optional[float], Optional[str]]:
+        """Extract text from image using the best available OCR method"""
+        tesseract_text, tesseract_conf = None, None
+        easyocr_text, easyocr_conf = None, None
+        
+        # Try both methods
+        if self.tesseract_enabled:
+            tesseract_text, tesseract_conf = self.extract_text_tesseract(image_data)
+        
+        if self.easyocr_enabled:
+            easyocr_text, easyocr_conf = self.extract_text_easyocr(image_data)
+        
+        # Choose the best result based on confidence and text length
+        best_text, best_conf, best_method = None, 0, None
+        
+        if tesseract_text and tesseract_conf:
+            if len(tesseract_text.strip()) > 5 and tesseract_conf > 0.3:
+                best_text, best_conf, best_method = tesseract_text, tesseract_conf, "tesseract"
+        
+        if easyocr_text and easyocr_conf:
+            # Prefer EasyOCR if it has higher confidence or much longer text
+            if (easyocr_conf > best_conf + 0.1) or (len(easyocr_text.strip()) > len(best_text or '') * 1.5):
+                best_text, best_conf, best_method = easyocr_text, easyocr_conf, "easyocr"
+        
+        # Fallback: use any available result if no high-confidence result found
+        if not best_text:
+            if tesseract_text and len(tesseract_text.strip()) > 2:
+                best_text, best_conf, best_method = tesseract_text, tesseract_conf or 0, "tesseract"
+            elif easyocr_text and len(easyocr_text.strip()) > 2:
+                best_text, best_conf, best_method = easyocr_text, easyocr_conf or 0, "easyocr"
+        
+        return best_text, best_conf, best_method
+    
+    def _clean_ocr_text(self, text: str) -> str:
+        """Clean and normalize OCR extracted text"""
+        if not text:
+            return ""
+        
+        # Remove excessive whitespace
+        text = ' '.join(text.split())
+        
+        # Remove common OCR artifacts
+        text = text.replace('|', 'I')  # Common misread
+        text = text.replace('0', 'O') if text.isalpha() else text  # Context-dependent replacement
+        
+        # Remove very short "words" that are likely artifacts
+        words = text.split()
+        filtered_words = [word for word in words if len(word) > 1 or word.isalnum()]
+        
+        return ' '.join(filtered_words).strip()
+
+
 class ImageExtractor:
-    """Main image extraction class that orchestrates multiple extraction methods"""
+    """Main image extraction class that orchestrates multiple extraction methods with OCR capabilities"""
     
     def __init__(self, settings: Dict[str, Any] = None):
         self.settings = settings or IMAGE_EXTRACTION_SETTINGS
@@ -325,8 +564,18 @@ class ImageExtractor:
         if PDFPLUMBER_AVAILABLE and self.settings.get('extract_images', True):
             self.extractors['pdfplumber'] = PDFPlumberImageExtractor(self.settings)
         
+        # Initialize OCR processor
+        self.ocr_processor = None
+        if self.settings.get('enable_ocr', True):
+            try:
+                self.ocr_processor = OCRImageProcessor(self.settings)
+                logger.info("OCR processor initialized for image text extraction")
+            except Exception as e:
+                logger.warning(f"Failed to initialize OCR processor: {str(e)}")
+        
         logger.info(f"Initialized image extractor", 
-                   context={'enabled_methods': list(self.extractors.keys())})
+                   context={'enabled_methods': list(self.extractors.keys()),
+                           'ocr_enabled': self.ocr_processor is not None})
     
     def extract_all_images(self, pdf_path: str, output_dir: Path) -> Dict[str, Any]:
         """Extract images using all available methods"""
@@ -372,6 +621,33 @@ class ImageExtractor:
         
         # Combine unique images
         combined_images = self._combine_images(results)
+        
+        # Add OCR processing to extracted images
+        if self.ocr_processor and combined_images:
+            logger.info("Starting OCR processing for extracted images")
+            ocr_start_time = time.time()
+            ocr_processed_count = 0
+            
+            for image in combined_images:
+                if image.image_data:  # Only process images with actual data
+                    try:
+                        ocr_text, ocr_confidence, ocr_method = self.ocr_processor.extract_text_from_image(image.image_data)
+                        if ocr_text and len(ocr_text.strip()) > 3:  # Only keep meaningful text
+                            image.ocr_text = ocr_text
+                            image.ocr_confidence = ocr_confidence
+                            image.ocr_method = ocr_method
+                            ocr_processed_count += 1
+                            logger.debug(f"OCR extracted from {image.filename}: {len(ocr_text)} chars, confidence: {ocr_confidence:.3f}")
+                        else:
+                            logger.debug(f"No meaningful text found in {image.filename}")
+                    except Exception as e:
+                        logger.warning(f"OCR failed for {image.filename}: {str(e)}")
+            
+            ocr_time = time.time() - ocr_start_time
+            logger.info(f"OCR processing completed", 
+                       context={'images_processed': ocr_processed_count, 
+                               'total_images': len(combined_images),
+                               'ocr_time': ocr_time})
         
         total_time = time.time() - start_time
         

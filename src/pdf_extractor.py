@@ -423,6 +423,9 @@ class PDFExtractor:
             output_structure = self.file_handler.create_output_structure(pdf_path.name)
             image_results = self.image_extractor.extract_all_images(str(pdf_path), output_structure['images'])
             
+            # Save OCR results if available
+            self._save_image_ocr_results(image_results, output_structure['images'], pdf_path.name)
+            
             # Get best images for logging
             best_images = self.image_extractor.get_best_images(image_results)
             
@@ -522,6 +525,62 @@ class PDFExtractor:
             df = pd.DataFrame(fields_data)
             csv_path = output_dir / f"{pdf_name.replace('.pdf', '')}_forms.csv"
             df.to_csv(csv_path, index=False)
+    
+    def _save_image_ocr_results(self, image_results: Dict[str, Any], output_dir: Path, pdf_name: str):
+        """Save OCR text extracted from images"""
+        combined_images = image_results.get('combined_images', [])
+        
+        if not combined_images:
+            logger.warning("No images to save OCR results for")
+            return
+        
+        # Collect OCR data from images
+        ocr_data = []
+        all_ocr_text = []
+        
+        for img in combined_images:
+            if hasattr(img, 'ocr_text') and img.ocr_text:
+                ocr_entry = {
+                    'filename': img.filename,
+                    'page': img.page_number,
+                    'text': img.ocr_text,
+                    'confidence': getattr(img, 'ocr_confidence', None),
+                    'method': getattr(img, 'ocr_method', None),
+                    'width': img.width,
+                    'height': img.height,
+                    'bbox': getattr(img, 'bbox', None)
+                }
+                ocr_data.append(ocr_entry)
+                all_ocr_text.append(f"=== {img.filename} (Page {img.page_number}) ===\n{img.ocr_text}\n")
+        
+        if not ocr_data:
+            logger.info("No OCR text found in extracted images")
+            return
+        
+        # Save as JSON with metadata
+        json_data = {
+            'pdf_file': pdf_name,
+            'images_with_text': len(ocr_data),
+            'total_images': len(combined_images),
+            'ocr_results': ocr_data,
+            'extraction_metadata': {
+                'best_method': image_results.get('best_method', 'unknown'),
+                'methods_used': image_results.get('summary', {}).get('methods_used', [])
+            }
+        }
+        json_path = output_dir / f"{pdf_name.replace('.pdf', '')}_ocr.json"
+        self.file_handler.save_json(json_data, json_path)
+        
+        # Save as plain text file for easy reading
+        if all_ocr_text:
+            text_content = f"OCR Text Extraction Results for {pdf_name}\n"
+            text_content += "=" * 50 + "\n\n"
+            text_content += "\n".join(all_ocr_text)
+            
+            txt_path = output_dir / f"{pdf_name.replace('.pdf', '')}_ocr.txt"
+            self.file_handler.save_text(text_content, txt_path)
+            
+            logger.info(f"Saved OCR results: {len(ocr_data)} images with text to {txt_path}")
     
     def _perform_validation(self, extraction_results: Dict[str, Any]) -> Dict[str, Any]:
         """Perform accuracy validation on extraction results"""

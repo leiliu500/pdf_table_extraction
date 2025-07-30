@@ -47,8 +47,11 @@ python main.py -i path/to/file.pdf -o output/ --tables-only
 # Extract only text (faster processing)
 python main.py -i path/to/file.pdf -o output/ --texts-only
 
-# Extract only forms (faster processing)
-python main.py -i path/to/file.pdf -o output/ --forms-only
+# Extract only images (faster processing)
+python main.py -i path/to/file.pdf -o output/ --images-only
+
+# Extract only images with OCR text extraction
+python main.py -i path/to/file.pdf -o output/ --images-only
 
 # Use custom file pattern
 python main.py -i pdf_directory/ -o output/ --pattern "*.PDF"
@@ -76,6 +79,7 @@ python main.py -i file.pdf -o output/ --config config_sample.json
 | `--tables-only` | Extract only tables | `--tables-only` |
 | `--texts-only` | Extract only text content | `--texts-only` |
 | `--forms-only` | Extract only form fields | `--forms-only` |
+| `--images-only` | Extract only images with OCR text extraction | `--images-only` |
 | `--log-level` | Set logging level | `--log-level DEBUG` |
 | `--no-validation` | Disable accuracy validation | `--no-validation` |
 | `--pattern` | File pattern for directory processing | `--pattern "*.PDF"` |
@@ -212,12 +216,44 @@ Extracts form fields and annotations:
 1. **PyMuPDF** - Widget and annotation extraction
 2. **PyPDF2** - Basic form field extraction
 
-### Image Extraction
+### Image Extraction with OCR
 
-Extracts embedded images:
+Extracts embedded images and performs OCR text recognition:
 
-1. **PyMuPDF** - Full image data extraction
+1. **PyMuPDF** - Full image data extraction with OCR
 2. **pdfplumber** - Image metadata detection
+
+#### OCR Features
+
+The tool now includes advanced OCR capabilities for extracting text from images:
+
+1. **Tesseract OCR** - High-accuracy text recognition
+   - Supports multiple languages
+   - Configurable confidence thresholds
+   - Image preprocessing for better accuracy
+
+2. **EasyOCR** - Deep learning-based OCR
+   - Superior performance on complex layouts
+   - Better handling of various fonts and styles
+   - GPU acceleration support (when available)
+
+#### OCR Text Extraction Process
+
+1. **Image Preprocessing**
+   - Noise reduction using advanced filtering
+   - Contrast enhancement with CLAHE
+   - Adaptive thresholding for better text detection
+   - Grayscale conversion for optimal OCR performance
+
+2. **Multi-Method OCR**
+   - Both Tesseract and EasyOCR are used for comparison
+   - Best result is selected based on confidence and text length
+   - Fallback mechanisms ensure text extraction even from challenging images
+
+3. **Text Post-Processing**
+   - Removal of OCR artifacts and noise
+   - Whitespace normalization
+   - Confidence-based filtering of low-quality results
 
 ## Accuracy Features
 
@@ -266,6 +302,14 @@ Create a JSON configuration file to customize extraction behavior:
       "stream": false
     }
   },
+  "images": {
+    "extract_images": true,
+    "enable_ocr": true,
+    "tesseract_enabled": true,
+    "easyocr_enabled": true,
+    "ocr_min_confidence": 0.3,
+    "image_preprocessing": true
+  },
   "validation": {
     "confidence_threshold": 0.8,
     "enable_comparison": true
@@ -300,6 +344,16 @@ python main.py -i pdf/304-Cedar-Street/2.\ Property\ Details.pdf -o output/ --lo
 ```bash
 # Process all real estate documents
 python main.py -i pdf/304-Cedar-Street/ -o output/
+```
+
+### Extract Property Images with OCR
+
+```bash
+# Extract images with OCR text recognition from property documents
+python main.py -i pdf/304-Cedar-Street/0.\ Coversheet.pdf -o output/ --images-only
+
+# Extract all images and text from entire property documentation
+python main.py -i pdf/304-Cedar-Street/ -o output/ --images-only
 ```
 
 ### Extract MLS Text Content
