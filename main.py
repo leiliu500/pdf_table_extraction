@@ -52,14 +52,14 @@ Examples:
     parser.add_argument(
         "-i", "--input",
         type=str,
-        required=True,
+        required=False,  # Not required for RAG query mode
         help="Input PDF file or directory containing PDF files"
     )
     
     parser.add_argument(
         "-o", "--output",
         type=str,
-        required=True,
+        required=False,  # Not required for RAG query mode
         help="Output directory for extraction results"
     )
     
@@ -110,6 +110,25 @@ Examples:
         "--config",
         type=str,
         help="Path to custom configuration file (JSON)"
+    )
+    
+    # RAG System Arguments
+    parser.add_argument(
+        "--rag-process",
+        action="store_true",
+        help="Process PDF through RAG system for question answering"
+    )
+    
+    parser.add_argument(
+        "--rag-query",
+        type=str,
+        help="Query processed PDFs using RAG system"
+    )
+    
+    parser.add_argument(
+        "--rag-stats",
+        action="store_true", 
+        help="Show RAG system statistics"
     )
     
     return parser
@@ -231,17 +250,153 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
     
+    # Handle RAG query mode (doesn't require input file)
+    if args.rag_query:
+        try:
+            import asyncio
+            from src.rag import query_pdf_documents
+            
+            print(f"Querying RAG system...")
+            print(f"Question: {args.rag_query}")
+            print(f"{'='*60}")
+            
+            result = asyncio.run(query_pdf_documents(args.rag_query))
+            
+            if result['status'] == 'success':
+                print(f"Answer: {result['answer']}")
+                print(f"\nConfidence: {result['confidence_score']*100:.1f}%")
+                print(f"Processing time: {result['processing_time']:.2f}s")
+                print(f"Sources consulted: {result['retrieved_chunks']} chunks")
+                
+                # Show citations if available
+                citations = result.get('citations', [])
+                if citations:
+                    print(f"\nSources:")
+                    for citation in citations:
+                        filename = citation.get('filename', 'Unknown')
+                        page = citation.get('page_number', 'N/A')
+                        content_type = citation.get('content_type', 'text')
+                        similarity = citation.get('similarity_score', 0.0)
+                        print(f"  [{citation['index']}] {filename} (Page {page}, {content_type}) - Relevance: {similarity*100:.1f}%")
+                
+            elif result['status'] == 'no_results':
+                print(f"No relevant information found for your query.")
+                print("Try rephrasing your question or make sure documents are processed first.")
+                
+            else:
+                print(f"Query failed: {result.get('error', 'Unknown error')}")
+                
+        except ImportError as e:
+            print(f"RAG system dependencies not available: {e}")
+            print("Please install RAG dependencies: pip install -r requirements.txt")
+        except Exception as e:
+            print(f"Query failed: {e}")
+        
+        return
+    
+    # Handle RAG stats mode
+    if args.rag_stats:
+        try:
+            import asyncio
+            from src.rag import create_rag_pipeline
+            
+            async def get_rag_stats():
+                print("RAG System Statistics")
+                print("="*60)
+                
+                pipeline = await create_rag_pipeline()
+                stats = await pipeline.get_pipeline_stats()
+                await pipeline.close()
+                return stats
+            
+            stats = asyncio.run(get_rag_stats())
+            
+            # Processing stats
+            proc_stats = stats.get('processing_stats', {})
+            print(f"Processing Statistics:")
+            print(f"  • Documents processed: {proc_stats.get('documents_processed', 0)}")
+            print(f"  • Total chunks created: {proc_stats.get('total_chunks_created', 0)}")
+            print(f"  • Embeddings generated: {proc_stats.get('embeddings_generated', 0)}")
+            print(f"  • Queries processed: {proc_stats.get('queries_processed', 0)}")
+            
+            processing_times = proc_stats.get('processing_times', [])
+            if processing_times:
+                avg_time = sum(processing_times) / len(processing_times)
+                print(f"  • Average processing time: {avg_time:.2f}s")
+            
+            # Database stats
+            db_stats = stats.get('database_stats', {})
+            if db_stats:
+                print(f"\nDatabase Statistics:")
+                print(f"  • Total documents: {db_stats.get('total_documents', 0)}")
+                print(f"  • Total embeddings: {db_stats.get('total_embeddings', 0)}")
+                print(f"  • Average confidence: {db_stats.get('average_confidence', 0)*100:.1f}%")
+                
+                chunks_by_type = db_stats.get('chunks_by_type', {})
+                if chunks_by_type:
+                    print(f"  • Chunks by type: {', '.join(f'{k}({v})' for k, v in chunks_by_type.items())}")
+            
+            # Ollama stats
+            ollama_stats = stats.get('ollama_stats', {})
+            if ollama_stats:
+                print(f"\nOllama Performance:")
+                print(f"  • Embedding model: {ollama_stats.get('embedding_model', 'Unknown')}")
+                print(f"  • LLM model: {ollama_stats.get('llm_model', 'Unknown')}")
+                print(f"  • Using fallback embeddings: {ollama_stats.get('using_fallback_embeddings', False)}")
+                
+                emb_stats = ollama_stats.get('embedding_stats', {})
+                if emb_stats:
+                    print(f"  • Embedding requests: {emb_stats.get('total_requests', 0)}")
+                    print(f"  • Average embedding time: {emb_stats.get('average_time', 0):.2f}s")
+                
+                llm_stats = ollama_stats.get('llm_stats', {})
+                if llm_stats:
+                    print(f"  • LLM requests: {llm_stats.get('total_requests', 0)}")
+                    print(f"  • Average response time: {llm_stats.get('average_time', 0):.2f}s")
+            
+            # Config info
+            config = stats.get('pipeline_config', {})
+            if config:
+                print(f"\nConfiguration:")
+                print(f"  • Chunk size: {config.get('chunk_size', 0)}")
+                print(f"  • Similarity top-k: {config.get('similarity_top_k', 0)}")
+                print(f"  • Accuracy threshold: {config.get('accuracy_threshold', 0)*100:.1f}%")
+                
+        except ImportError as e:
+            print(f"RAG system dependencies not available: {e}")
+            print("Please install RAG dependencies: pip install -r requirements.txt")
+        except Exception as e:
+            print(f"Failed to get RAG stats: {e}")
+        
+        return
+    
+    # Check for RAG query or stats modes that don't need input/output
+    if args.rag_query or args.rag_stats:
+        # These modes don't require input/output arguments
+        pass
+    else:
+        # All other modes require input and output
+        if not args.input:
+            print("Error: Input file/directory (-i/--input) is required for extraction modes")
+            sys.exit(1)
+        if not args.output:
+            print("Error: Output directory (-o/--output) is required for extraction modes")
+            sys.exit(1)
+    
     # Validate mutually exclusive options
-    exclusive_options = [args.tables_only, args.texts_only, args.forms_only, args.images_only]
+    exclusive_options = [args.tables_only, args.texts_only, args.forms_only, args.images_only, args.rag_process]
     if sum(exclusive_options) > 1:
-        print("Error: --tables-only, --texts-only, --forms-only, and --images-only cannot be used together")
+        print("Error: --tables-only, --texts-only, --forms-only, --images-only, and --rag-process cannot be used together")
         sys.exit(1)
     
-    # Validate input path
-    input_path = Path(args.input)
-    if not input_path.exists():
-        print(f"Error: Input path does not exist: {input_path}")
-        sys.exit(1)
+    # Validate input path (only if provided)
+    if args.input:
+        input_path = Path(args.input)
+        if not input_path.exists():
+            print(f"Error: Input path does not exist: {input_path}")
+            sys.exit(1)
+    else:
+        input_path = None
     
     # Load custom configuration if provided
     custom_settings = None
@@ -251,53 +406,57 @@ def main():
             print(f"Error: Failed to load configuration from {args.config}")
             sys.exit(1)
     
-    # Initialize extractor
-    try:
-        extractor = PDFExtractor(
-            input_dir=input_path if input_path.is_dir() else input_path.parent,
-            output_dir=args.output,
-            log_level=args.log_level,
-            enable_validation=not args.no_validation,
-            custom_settings=custom_settings
-        )
-        
-        print(f"Initialized PDF extractor")
-        print(f"Input: {input_path}")
-        print(f"Output: {args.output}")
-        print(f"Validation: {'Enabled' if not args.no_validation else 'Disabled'}")
-        print(f"Log level: {args.log_level}")
-        
-    except Exception as e:
-        print(f"Error: Failed to initialize PDF extractor: {e}")
-        sys.exit(1)
+    # Initialize extractor (only if needed for extraction modes)
+    extractor = None
+    if input_path and args.output:
+        try:
+            extractor = PDFExtractor(
+                input_dir=input_path if input_path.is_dir() else input_path.parent,
+                output_dir=args.output,
+                log_level=args.log_level,
+                enable_validation=not args.no_validation,
+                custom_settings=custom_settings
+            )
+            
+            print(f"Initialized PDF extractor")
+            print(f"Input: {input_path}")
+            print(f"Output: {args.output}")
+            print(f"Validation: {'Enabled' if not args.no_validation else 'Disabled'}")
+            print(f"Log level: {args.log_level}")
+            print()
+            
+        except Exception as e:
+            print(f"Error initializing PDF extractor: {e}")
+            sys.exit(1)
     
     # Perform extraction
-    try:
-        if input_path.is_file():
-            # Single file
-            if args.tables_only:
-                print(f"\nExtracting tables only from: {input_path.name}")
-                table_results = extractor.extract_tables_only(input_path)
-                
-                # Print table-only summary
-                print(f"\n{'='*60}")
-                print(f"TABLE EXTRACTION RESULTS: {input_path.name}")
-                print(f"{'='*60}")
-                print(f"Tables found: {table_results['summary']['total_tables_found']}")
-                print(f"Best method: {table_results.get('best_method', 'N/A')}")
-                print(f"Processing time: {table_results.get('total_processing_time', 0):.2f} seconds")
-                
-                if table_results['summary']['total_tables_found'] > 0:
-                    print(f"\nMethods used:")
-                    for method in table_results['summary']['methods_used']:
-                        method_results = table_results['extraction_results'].get(method)
-                        if method_results and method_results.extraction_successful:
-                            tables_count = len(method_results.tables)
-                            avg_confidence = sum(method_results.confidence_scores) / len(method_results.confidence_scores) if method_results.confidence_scores else 0
-                            print(f"  • {method}: {tables_count} tables (confidence: {avg_confidence*100:.1f}%)")
-                
-                print(f"\nExtraction completed. Results saved to: {args.output}")
-                return
+    if extractor and input_path:
+        try:
+            if input_path.is_file():
+                # Single file
+                if args.tables_only:
+                    print(f"\nExtracting tables only from: {input_path.name}")
+                    table_results = extractor.extract_tables_only(input_path)
+                    
+                    # Print table-only summary
+                    print(f"\n{'='*60}")
+                    print(f"TABLE EXTRACTION RESULTS: {input_path.name}")
+                    print(f"{'='*60}")
+                    print(f"Tables found: {table_results['summary']['total_tables_found']}")
+                    print(f"Best method: {table_results.get('best_method', 'N/A')}")
+                    print(f"Processing time: {table_results.get('total_processing_time', 0):.2f} seconds")
+                    
+                    if table_results['summary']['total_tables_found'] > 0:
+                        print(f"\nMethods used:")
+                        for method in table_results['summary']['methods_used']:
+                            method_results = table_results['extraction_results'].get(method)
+                            if method_results and method_results.extraction_successful:
+                                tables_count = len(method_results.tables)
+                                avg_confidence = sum(method_results.confidence_scores) / len(method_results.confidence_scores) if method_results.confidence_scores else 0
+                                print(f"  • {method}: {tables_count} tables (confidence: {avg_confidence*100:.1f}%)")
+                    
+                    print(f"\nExtraction completed. Results saved to: {args.output}")
+                    return
             
             elif args.texts_only:
                 print(f"\nExtracting text only from: {input_path.name}")
@@ -427,6 +586,77 @@ def main():
                 print(f"\nExtraction completed. Results saved to: {args.output}")
                 return
 
+            elif args.rag_process:
+                print(f"\nProcessing PDF through RAG system: {input_path.name}")
+                
+                try:
+                    import asyncio
+                    from src.rag import process_pdf_with_rag
+                    
+                    # Process PDF through RAG pipeline
+                    result = asyncio.run(process_pdf_with_rag(str(input_path)))
+                    
+                    print(f"\n{'='*60}")
+                    print(f"RAG PROCESSING RESULTS: {input_path.name}")
+                    print(f"{'='*60}")
+                    
+                    if result['status'] == 'success':
+                        print(f"✓ Document processed successfully")
+                        print(f"  • Document ID: {result['document_id']}")
+                        print(f"  • Processing time: {result['processing_time']:.2f}s")
+                        
+                        # Show extraction summary
+                        extraction_summary = result.get('extraction_summary', {})
+                        print(f"\nExtraction Summary:")
+                        for content_type, stats in extraction_summary.items():
+                            count = stats.get('count', 0)
+                            avg_conf = stats.get('average_confidence', 0.0)
+                            print(f"  • {content_type.title()}: {count} items (avg confidence: {avg_conf*100:.1f}%)")
+                        
+                        # Show chunk summary
+                        chunk_summary = result.get('chunk_summary', {})
+                        if chunk_summary:
+                            print(f"\nChunk Summary:")
+                            print(f"  • Total chunks: {chunk_summary.get('total_chunks', 0)}")
+                            print(f"  • Average confidence: {chunk_summary.get('average_confidence', 0.0)*100:.1f}%")
+                            print(f"  • Average chunk length: {chunk_summary.get('average_chunk_length', 0):.0f} characters")
+                            
+                            type_dist = chunk_summary.get('content_type_distribution', {})
+                            if type_dist:
+                                print(f"  • Content types: {', '.join(f'{k}({v})' for k, v in type_dist.items())}")
+                        
+                        # Show accuracy metrics
+                        accuracy_metrics = result.get('accuracy_metrics', {})
+                        if accuracy_metrics:
+                            print(f"\nAccuracy Metrics:")
+                            for metric, value in accuracy_metrics.items():
+                                print(f"  • {metric.replace('_', ' ').title()}: {value*100:.1f}%")
+                        
+                        print(f"\n✓ Document ready for querying!")
+                        print(f"Use: python main.py --rag-query \"Your question here\"")
+                        
+                    elif result['status'] == 'already_processed':
+                        print(f"ℹ Document already processed")
+                        print(f"  • Document ID: {result['document_id']}")
+                        doc_info = result.get('document_info', {})
+                        if doc_info:
+                            print(f"  • Originally processed: {doc_info.get('processing_date', 'Unknown')}")
+                            print(f"  • Total chunks: {doc_info.get('total_chunks', 0)}")
+                    
+                    else:
+                        print(f"✗ Processing failed: {result.get('error', 'Unknown error')}")
+                        return
+                
+                except ImportError as e:
+                    print(f"✗ RAG system dependencies not available: {e}")
+                    print("Please install RAG dependencies: pip install -r requirements.txt")
+                    return
+                except Exception as e:
+                    print(f"✗ RAG processing failed: {e}")
+                    return
+                
+                return
+
             else:
                 print(f"\nExtracting all content from: {input_path.name}")
                 result = extractor.extract_pdf(input_path)
@@ -453,19 +683,19 @@ def main():
                 sys.exit(1)
             
             print_results_summary(results)
-    
-    except KeyboardInterrupt:
-        print("\nExtraction interrupted by user")
-        sys.exit(1)
-    
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        logger.error("Extraction failed", exception=e)
-        print(f"Error: Extraction failed: {e}")
-        sys.exit(1)
-    
-    print(f"\nExtraction completed. Results saved to: {args.output}")
+        
+        except KeyboardInterrupt:
+            print("\nExtraction interrupted by user")
+            sys.exit(1)
+        
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            logger.error("Extraction failed", exception=e)
+            print(f"Error: Extraction failed: {e}")
+            sys.exit(1)
+        
+        print(f"\nExtraction completed. Results saved to: {args.output}")
 
 
 if __name__ == "__main__":
